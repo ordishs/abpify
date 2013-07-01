@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>ABP Toolbar</title>
+	<script src="./jquery-1.9.1.js"></script>
+	<script src="./abpify.js"></script>
+	
+	<script>
+	
+		ABPIFY.init("CHNXh3w4uNTWiSVZdHTEQTCvpdHPvXC6NK2DlWKgH2CyqC3v6N4f-9vMvFUMPc_1MF9C7RhlFZF14GUP5SuJ2A==");	
+	
+	</script>	
+</head>
+
+<body>
+	<header id="abp_toolbar"></header>
+	
+	<section>
+		
+		<input type="button" id="sport_btn" value="GET SPORTS" />
+		
+		<div id="result"></div>		
+	</section>
+
+	<script>
+		$(document).ready(function() {
+			
+			$("#sport_btn").click(function() {
+				ABPIFY.ajax("/rest/sports/FOOT", function(data) {
+					if (data) {
+						var result = "";
+						for (var i = 0; i < data.length; i++) {
+							result += data[i].code + "<br>";
+						}
+						$("#result").html(result);
+					}
+				});
+			});
+			
+			
+			$("#abp_toolbar").abpify({showDebug: true});
+		});
+			
+		
+			
+	</script>
+
+</body>
+	
+
+</html>
