@@ -52,17 +52,27 @@ ABPIFY = {
 	
 	login : function(url, username, password) {
 		localStorage.setItem("ABP-URL", url);
-		ABPIFY.ajax("/rest/accounts/identity/" + username + "?password=" + password, function() {
-			localStorage.setItem("ABP-User", username);			
-		}, function(xhr, status, error) {
+		ABPIFY.get("/rest/accounts/identity/" + username + "?password=" + password, function(data, xhr) {
+		
+			localStorage.setItem("ABP-User", username);
+			ABPIFY.populate_bar();
+
+			if (xhr.status !== 200) {
+				ABPIFY.logout();
+				var info = xhr.getResponseHeader("X-LVS-Information");
+				alert("Invalid username / password [" + info + "]");
+			}			
+		
+		}, function(xhr, e) {
 			ABPIFY.logout();
 			var info = xhr.getResponseHeader("X-LVS-Information");
-			alert('Call to ' + url + ': ' + xhr.status + ' - ' + xhr.statusText + ' (' + info  + ')' );
+			alert('Call to ' + url + ': ' + xhr.status + ' - ' + xhr.statusText);
 		});
 	},
 	
 	logout : function() {
 		localStorage.removeItem("ABP-Token");
+		ABPIFY.populate_bar();
 	},
 	
 	isLoggedIn : function() {
@@ -73,35 +83,24 @@ ABPIFY = {
 		};	
 	},
 	
-	ajax : function(url, data, callback, error) {
+	get : function(url, success, error) {
+		ABPIFY.ajax('GET', url, null, success, error);	
+	},
 	
-		// shift arguments if data argument was omitted
-		if ( $.isFunction( data ) ) {
-			error = callback;
-			callback = data;
-			data = null;
-		}
-		
-		if (typeof error === "undefined") {
-			error = function(xhr, status, error) {
-				switch (status) {
-					case 'error':
-						var info = xhr.getResponseHeader("X-LVS-Information");
-						alert('Call to ' + url + ': ' + xhr.status + ' - ' + xhr.statusText + ' (' + info  + ')' );
-						break;
-					case 'timeout':
-						alert('Timeout');
-						break;
-					case 'abort':
-						alert('Abort');
-						break;
-					case 'parsererror':
-						alert('Parser error=' + error);
-						break;
-				}
-			}
-		}
-		
+	post : function(url, data, success, error) {
+		ABPIFY.ajax('POST', url, data, success, error);	
+	},
+	
+	put : function(url, data, success, error) {
+		ABPIFY.ajax('PUT', url, data, success, error);	
+	},
+	
+	delete : function(url, success, error) {
+		ABPIFY.ajax('DELETE', url, null, success, error);	
+	},
+	
+	ajax : function(method, url, data, success, error) {
+	
 		if (ABPIFY.showDebug) var debug = {};
 
 		var token = localStorage.getItem("ABP-Token");
@@ -116,55 +115,74 @@ ABPIFY = {
 		var host = localStorage.getItem("ABP-URL");
 
 		if (ABPIFY.showDebug) {
-			debug['request_data'] = data;
+			if (data) debug['request_data'] = data;
 			debug['host'] = host;
 			debug['url'] = url;
 		}
 		
-		var rc = $.ajax({
-			type: 'GET',
-			dataType: 'json',
-			url: host + url,
-			data: data,
-			async: false,
-			timeout: 5000,
-			ifModified: false,
-			beforeSend: function(xhr, options) {
-				xhr.setRequestHeader('X-LVS-HSToken', token);
-			},
-			success: function(data, status, xhr) {
-				if (ABPIFY.showDebug) {
-					debug['response_data'] = data;
-					debug['status'] = status;
-					debug['xhr'] = xhr;
-					debug['stacktrace'] = ABPIFY.generate_stack();
-				}
-				
-				var token = xhr.getResponseHeader('X-LVS-HSToken');
-				if (token) {
-					localStorage.setItem("ABP-Token", token);
-				}
-				callback(data, status, xhr);
-			},
-			error: function(xhr, status, errorText) {
-				if (ABPIFY.showDebug) {
-					debug['status'] = status;
-					debug['xhr'] = xhr;
-					debug['stacktrace'] = ABPIFY.generate_stack();
-				}
-				
-				if (xhr.status === 403) {
-					ABPIFY.logout();
-				}
-				error(xhr, status, errorText);
+		var xhr = new XMLHttpRequest();
+		if ("withCredentials" in xhr) {
+			// XHR for Chrome/Firefox/Opera/Safari.
+			xhr.open(method, host + url, true); // the 3rd parameter is Async
+		} else if (typeof XDomainRequest != "undefined") {
+			// XDomainRequest for IE.
+			xhr = new XDomainRequest();
+			xhr.open(method, host + url);
+		} else {
+			// CORS not supported.
+			error(null, null);
+			return;
+		}
+		
+		xhr.setRequestHeader("Content-type", "application/json; charset=UTF-8");
+		xhr.setRequestHeader('X-LVS-HSToken', token);
+		
+		xhr.onload = function(e) {
+		
+			if (ABPIFY.showDebug) {
+				debug['xhr'] = xhr;
+				debug['stacktrace'] = ABPIFY.generate_stack();
+				console.log(debug);
 			}
-		});
 		
-		if (ABPIFY.showDebug) console.log(debug);
+			var token = xhr.getResponseHeader('X-LVS-HSToken');
+			if (token) {
+				localStorage.setItem("ABP-Token", token);
+			}
+			
+			var rc = parseInt(xhr.status.toString()[0]); // Get the first character.
+			if (rc >= 4) {
+				error(xhr, e);
+			} else {
+				success(JSON.parse(xhr.responseText), xhr);
+			}
+			
+		};
+
+		xhr.onerror = function(e) {
+			if (ABPIFY.showDebug) {
+				debug['xhr'] = xhr;
+				debug['stacktrace'] = ABPIFY.generate_stack();
+				console.log(debug);
+			}
+				
+			if (xhr.status === 403) {
+				ABPIFY.logout();
+			}
+			error(xhr, e);
+		};
 		
-		return rc;
-	
-	},
+		xhr.ontimeout = function(e) {
+			error(null, e);
+		}
+		
+		if ((method === "POST" || method === "PUT") && data) {
+			xhr.send(data);
+		} else {
+			xhr.send();		
+		}
+
+  	},
 	
 	populate_bar : function() {
 		var credentials = ABPIFY.credentials();
@@ -187,7 +205,6 @@ ABPIFY = {
 		} else {
 			ABPIFY.logout();
 		}
-		ABPIFY.populate_bar();
 	}, 
 		
 	generate_stack : function() {

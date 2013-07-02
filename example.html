@@ -26,7 +26,7 @@
 		$(document).ready(function() {
 			
 			$("#sport_btn").click(function() {
-				ABPIFY.ajax("/rest/sports/FOOT", function(data) {
+				ABPIFY.get("/rest/sports/FOOT", function(data, xhr) {
 					if (data) {
 						var result = "";
 						for (var i = 0; i < data.length; i++) {
@@ -34,6 +34,8 @@
 						}
 						$("#result").html(result);
 					}
+				}, function(xhr, e) {
+					alert(xhr.statusText + " [" + xhr.getResponseHeader('X-LVS-Information') + ']');
 				});
 			});
 			
